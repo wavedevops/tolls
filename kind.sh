@@ -46,6 +46,7 @@ nodes:
 - role: control-plane
 - role: worker
 - role: worker
+- role: worker
 EOF
 fi
 
@@ -67,5 +68,5 @@ step "✅ Step 8/8: Done!"
 # Restore stdout/stderr
 exec 1>&3 2>&4
 
-echo "✅✅✅✅ Completed. Detailed logs saved in: $LOG_FILE"
+echo "✅ Completed. Detailed logs saved in: $LOG_FILE"
 
