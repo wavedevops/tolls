@@ -1,18 +1,22 @@
+
 #!/bin/bash
 
-# Install bash completion if not present
-sudo apt update
-apt list --upgradable
-sudo apt install -y bash-completion
+# Install bash completion
+sudo apt update && sudo apt install -y bash-completion
 
-# Enable kubectl completion
-kubectl completion bash | sudo tee /etc/bash_completion.d/kubectl > /dev/null
+# Setup kubectl completion and alias in ~/.bashrc
+cat << 'EOF' >> ~/.bashrc
 
-# Add alias and completion to ~/.bashrc if not already added
-grep -qxF 'alias k=kubectl' ~/.bashrc || echo 'alias k=kubectl' >> ~/.bashrc
-grep -qxF 'complete -F __start_kubectl k' ~/.bashrc || echo 'complete -F __start_kubectl k' >> ~/.bashrc
+# Kubectl completion and alias
+source <(kubectl completion bash)
+alias k=kubectl
+complete -o default -F __start_kubectl k
+EOF
 
-# Reload bashrc
-source ~/.bashrc
+# Apply changes to the current session
+source /usr/share/bash-completion/bash_completion
+source <(kubectl completion bash)
+alias k=kubectl
+complete -o default -F __start_kubectl k
 
-echo "✅ Done! Now try: k get i  and press TAB"
+echo "✅ Done! Alias 'k' with completion is ready. Try: k get nodes"
