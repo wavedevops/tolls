@@ -12,4 +12,7 @@ bash ./02.compile.sh
 echo "Running 03.commands.sh..."
 bash ./03.commands.sh
 
+
 echo "All scripts executed successfully!"
+
+echo -e "\e[1;32mRun this command: \e[1;33msource ~/.bashrc\e[0m"
