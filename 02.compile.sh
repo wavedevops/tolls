@@ -2,6 +2,7 @@
 
 # Install bash completion if not present
 sudo apt update
+apt list --upgradable
 sudo apt install -y bash-completion
 
 # Enable kubectl completion
