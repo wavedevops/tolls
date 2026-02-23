@@ -6,6 +6,12 @@ CLUSTER_NAME="k8s-cluster"
 CONFIG_FILE="main.yaml"
 CONTEXT_NAME="kind-${CLUSTER_NAME}"
 
+# Colors
+GREEN=$(tput setaf 2)
+RED=$(tput setaf 1)
+BLUE=$(tput setaf 4)
+RESET=$(tput sgr0)
+
 # mktemp needs at least 6 X
 LOG_FILE="$(mktemp /tmp/kind-setup-XXXXXX.log)"
 
@@ -13,10 +19,13 @@ LOG_FILE="$(mktemp /tmp/kind-setup-XXXXXX.log)"
 exec 3>&1 4>&2
 exec >"$LOG_FILE" 2>&1
 
+# Print step messages in BLUE
 step() {
-  # Print progress to terminal only
-  echo "$1" >&3
+  echo "${BLUE}$1${RESET}" >&3
 }
+
+# On any error, print FAILURE in RED
+trap 'echo "${RED}❌ FAILURE: Something went wrong. Check log: $LOG_FILE${RESET}" >&3' ERR
 
 step "🚀 Step 1/9: Checking Docker..."
 if ! command -v docker >/dev/null 2>&1; then
@@ -40,7 +49,7 @@ fi
 
 step "📄 Step 4/9: Creating config file if needed..."
 if [ ! -f "$CONFIG_FILE" ]; then
-  cat <<EOF > $CONFIG_FILE
+  cat <<EOF > "$CONFIG_FILE"
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -81,4 +90,4 @@ step "✅ Step 9/9: Done!"
 # Restore stdout/stderr
 exec 1>&3 2>&4
 
-echo "✅ Completed. Detailed logs saved in: $LOG_FILE"
+echo "${GREEN}✅ SUCCESS: Completed. Detailed logs saved in: $LOG_FILE${RESET}"

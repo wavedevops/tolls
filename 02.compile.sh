@@ -3,15 +3,21 @@ set -e  # Exit immediately if any command fails
 
 LOG_FILE="/tmp/kubectl-setup.log"
 
-# If any error happens, print message and exit
-trap 'echo "❌ Error occurred. Check log file: $LOG_FILE" >&3' ERR
+# Colors
+GREEN=$(tput setaf 2)
+RED=$(tput setaf 1)
+BLUE=$(tput setaf 4)
+RESET=$(tput sgr0)
+
+# If any error happens, print message in RED
+trap 'echo "${RED}❌ ERROR occurred. Check log file: $LOG_FILE${RESET}" >&3' ERR
 
 # Save all output to log file, but keep terminal for step messages
 exec 3>&1 4>&2
 exec >"$LOG_FILE" 2>&1
 
 step() {
-  echo "$1" >&3
+  echo "${BLUE}$1${RESET}" >&3
 }
 
 step "📄 Logging full output to $LOG_FILE"
@@ -36,6 +42,9 @@ source <(kubectl completion bash) || true
 alias k=kubectl
 complete -o default -F __start_kubectl k
 
-step "✅ Done! Alias 'k' with completion is ready."
-step "ℹ️  Please run: source ~/.bashrc  (or open a new terminal)"
-step "📄 Full log saved at: $LOG_FILE"
+# Restore stdout/stderr
+exec 1>&3 2>&4
+
+echo "${GREEN}✅ SUCCESS: Done! Alias 'k' with completion is ready.${RESET}"
+echo "${GREEN}ℹ️  Please run: source ~/.bashrc  (or open a new terminal)${RESET}"
+echo "${GREEN}📄 Full log saved at: $LOG_FILE${RESET}"
