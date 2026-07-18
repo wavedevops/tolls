@@ -1,0 +1,48 @@
+- name: Install GoCD Server
+  hosts: localhost
+  become: true
+
+  tasks:
+    - name: Install Java 17 and unzip
+      ansible.builtin.dnf:
+        name:
+          - java-17-openjdk
+          - unzip
+        state: present
+
+    - name: Create gocd user
+      ansible.builtin.user:
+        name: gocd
+        shell: /bin/bash
+        home: /home/gocd
+        create_home: yes
+
+    - name: Download GoCD Server
+      ansible.builtin.get_url:
+        url: https://download.gocd.org/binaries/23.5.0-18179/generic/go-server-23.5.0-18179.zip
+        dest: /tmp/go-server-23.5.0-18179.zip
+
+    - name: Extract GoCD Server
+      ansible.builtin.unarchive:
+        src: /tmp/go-server-23.5.0-18179.zip
+        dest: /home/gocd
+        remote_src: yes
+        owner: gocd
+        group: gocd
+        creates: /home/gocd/go-server-23.5.0
+
+    - name: Copy GoCD systemd service file
+      ansible.builtin.copy:
+        src: gocd-server.service
+        dest: /etc/systemd/system/gocd-server.service
+        mode: "0644"
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and Start GoCD Server
+      ansible.builtin.systemd:
+        name: gocd-server
+        enabled: true
+        state: started
