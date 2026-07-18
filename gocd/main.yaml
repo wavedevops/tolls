@@ -1,7 +1,6 @@
 - name: Install GoCD Server
   hosts: localhost
   become: true
-
   tasks:
     - name: Install Java 17 and unzip
       ansible.builtin.dnf:
