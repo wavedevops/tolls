@@ -4,7 +4,7 @@
   become: true
 
   vars:
-    gocd_server_ip: "localhost"
+    gocd_server_ip: "172.31.26.240"
 
   tasks:
     - name: Install Java and unzip
