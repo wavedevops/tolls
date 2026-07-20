@@ -6,53 +6,50 @@
     gocd_server_ip: "172.31.37.163"    # Change to your GoCD Server IP
 
   tasks:
-    - name: Install Java 17 and unzip
-      ansible.builtin.dnf:
-        name:
-          - java-17-openjdk
-          - unzip
-        state: present
+  - name: Install Java
+    ansible.builtin.dnf:
+      name: java-17-openjdk
+      state: present
 
-    - name: Create gocd user
-      ansible.builtin.user:
-        name: gocd
-        shell: /bin/bash
-        home: /home/gocd
-        create_home: yes
+  - name: Create gocd user
+    ansible.builtin.user:
+      name: gocd
+      shell: /bin/bash
+      create_home: true
 
-    - name: Download GoCD Agent
-      ansible.builtin.get_url:
-        url: https://download.gocd.org/binaries/23.5.0-18179/generic/go-agent-23.5.0-18179.zip
-        dest: /tmp/go-agent-23.5.0-18179.zip
-        mode: "0644"
+  - name: Download GoCD Agent
+    ansible.builtin.get_url:
+      url: https://download.gocd.org/binaries/23.5.0-18179/generic/go-agent-23.5.0-18179.zip
+      dest: /tmp/go-agent-23.5.0-18179.zip
+      mode: '0644'
 
-    - name: Extract GoCD Agent
-      ansible.builtin.unarchive:
-        src: /tmp/go-agent-23.5.0-18179.zip
-        dest: /home/gocd
-        remote_src: yes
-        owner: gocd
-        group: gocd
-        creates: /home/gocd/go-agent-23.5.0
+  - name: Unzip GoCD Agent
+    ansible.builtin.unarchive:
+      src: /tmp/go-agent-23.5.0-18179.zip
+      dest: /home/gocd/
+      remote_src: true
+      owner: gocd
+      group: gocd
+      creates: /home/gocd/go-agent-23.5.0
 
-    - name: Configure GoCD Server IP
-      ansible.builtin.replace:
-        path: /home/gocd/go-agent-23.5.0/wrapper-config/wrapper-properties.conf
-        regexp: 'wrapper.app.parameter.101=.*'
-        replace: 'wrapper.app.parameter.101={{ gocd_server_ip }}'
+  - name: Configure GoCD server IP
+    ansible.builtin.replace:
+      path: /home/gocd/go-agent-23.5.0/wrapper-config/wrapper-properties.conf
+      regexp: 'wrapper.app.parameter.101=.*'
+      replace: 'wrapper.app.parameter.101={{ gocd_server_ip }}'
 
-    - name: Copy GoCD Agent systemd service
-      ansible.builtin.copy:
-        src: gocd-agent.service
-        dest: /etc/systemd/system/gocd-agent.service
-        mode: "0644"
+  - name: Copy GoCD Agent systemd service
+    ansible.builtin.copy:
+      src: gocd-agent.service
+      dest: /etc/systemd/system/gocd-agent.service
+      mode: "0644"
 
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
+  - name: Reload systemd
+    ansible.builtin.systemd:
+      daemon_reload: true
 
-    - name: Enable and Start GoCD Agent
-      ansible.builtin.systemd:
-        name: gocd-agent
-        enabled: true
-        state: started
+  - name: Enable and start GoCD Agent
+    ansible.builtin.systemd:
+      name: gocd-agent
+      enabled: true
+      state: started
