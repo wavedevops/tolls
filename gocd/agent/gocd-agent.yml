@@ -3,7 +3,7 @@
   become: true
 
   vars:
-    gocd_server_ip: "192.168.1.100"    # Change to your GoCD Server IP
+    gocd_server_ip: "172.31.37.163"    # Change to your GoCD Server IP
 
   tasks:
     - name: Install Java 17 and unzip
