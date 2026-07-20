@@ -51,10 +51,11 @@
         creates: /gocd/go-agent-23.5.0
 
     - name: Configure GoCD Server URL
-      ansible.builtin.replace:
+      ansible.builtin.lineinfile:
         path: /gocd/go-agent-23.5.0/wrapper-config/wrapper-properties.conf
-        regexp: "^wrapper\\.app\\.parameter\\.101=.*"
-        replace: "wrapper.app.parameter.101=http://{{ gocd_server_ip }}:8153/go"
+        regexp: '^wrapper\.app\.parameter\.101='
+        line: "wrapper.app.parameter.101=http://{{ gocd_server_ip }}:8153/go"
+        backup: true
 
     - name: Copy GoCD Agent systemd service
       ansible.builtin.copy:
