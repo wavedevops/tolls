@@ -1,86 +1,10 @@
-# - name: Install GoCD Agent
-#   hosts: localhost
-#   connection: local
-#   become: true
-
-#   vars:
-#     gocd_server_ip: "172.31.37.163"
-
-#   tasks:
-#     - name: Install Java and unzip
-#       ansible.builtin.dnf:
-#         name:
-#           - java-17-openjdk
-#           - unzip
-#         state: present
-
-#     - name: Create gocd group
-#       ansible.builtin.group:
-#         name: gocd
-#         state: present
-
-#     - name: Create gocd user
-#       ansible.builtin.user:
-#         name: gocd
-#         group: gocd
-#         shell: /bin/bash
-#         create_home: false
-#         state: present
-
-#     - name: Create /gocd directory
-#       ansible.builtin.file:
-#         path: /gocd
-#         state: directory
-#         owner: gocd
-#         group: gocd
-#         mode: "0755"
-
-#     - name: Download GoCD Agent
-#       ansible.builtin.get_url:
-#         url: https://download.gocd.org/binaries/23.5.0-18179/generic/go-agent-23.5.0-18179.zip
-#         dest: /tmp/go-agent-23.5.0-18179.zip
-#         mode: "0644"
-
-#     - name: Extract GoCD Agent
-#       ansible.builtin.unarchive:
-#         src: /tmp/go-agent-23.5.0-18179.zip
-#         dest: /gocd
-#         remote_src: true
-#         owner: gocd
-#         group: gocd
-#         creates: /gocd/go-agent-23.5.0
-
-#     - name: Update GoCD Server URL
-#       ansible.builtin.shell: |
-#         sed -i 's|^wrapper.app.parameter.101=.*|wrapper.app.parameter.101=http://{{ gocd_server_ip }}:8153/go|' \
-#         /gocd/go-agent-23.5.0/wrapper-config/wrapper-properties.conf
-
-#     - name: Copy GoCD Agent systemd service
-#       ansible.builtin.copy:
-#         src: gocd-agent.service
-#         dest: /etc/systemd/system/gocd-agent.service
-#         owner: root
-#         group: root
-#         mode: "0644"
-
-#     - name: Reload systemd
-#       ansible.builtin.systemd:
-#         daemon_reload: true
-
-#     - name: Enable and start GoCD Agent
-#       ansible.builtin.systemd:
-#         name: gocd-agent
-#         enabled: true
-#         state: started
-
----
 - name: Install GoCD Agent
   hosts: localhost
   connection: local
   become: true
 
   vars:
-    gocd_server_ip: "172.31.37.163"
+    gocd_server_ip: "172.31.39.243"
 
   tasks:
     - name: Install Java and unzip
@@ -110,16 +34,11 @@
         owner: gocd
         group: gocd
         creates: /home/gocd/go-agent-23.5.0
+    
     - name: Update GoCD Server URL
       ansible.builtin.shell: |
         sed -i 's|^wrapper.app.parameter.101=.*|wrapper.app.parameter.101=http://{{ gocd_server_ip }}:8153/go|' \
         /home/gocd/go-agent-23.5.0/wrapper-config/wrapper-properties.conf
-
-    # - name: Configure GoCD Server URL
-    #   ansible.builtin.replace:
-    #     path: /home/gocd/go-agent-23.5.0/wrapper-config/wrapper-properties.conf
-    #     regexp: "^wrapper\\.app\\.parameter\\.101=.*"
-    #     replace: "wrapper.app.parameter.101=http://{{ gocd_server_ip }}:8153/go"
 
     - name: Copy GoCD Agent service file
       ansible.builtin.copy:
