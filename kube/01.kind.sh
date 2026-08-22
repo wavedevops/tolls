@@ -1,41 +1,29 @@
 #!/bin/bash
-
 set -e
 
 CLUSTER_NAME="k8s-cluster"
 CONFIG_FILE="main.yaml"
 CONTEXT_NAME="kind-${CLUSTER_NAME}"
 
-# Colors
 GREEN=$(tput setaf 2)
 RED=$(tput setaf 1)
 BLUE=$(tput setaf 4)
 RESET=$(tput sgr0)
 
-# mktemp needs at least 6 X
 LOG_FILE="$(mktemp /tmp/kind-setup-XXXXXX.log)"
-
-# Send all command output to log file
 exec 3>&1 4>&2
 exec >"$LOG_FILE" 2>&1
 
-# Print step messages in BLUE
-step() {
-  echo "${BLUE}$1${RESET}" >&3
-}
-
-# On any error, print FAILURE in RED
+step() { echo "${BLUE}$1${RESET}" >&3; }
 trap 'echo "${RED}❌ FAILURE: Something went wrong. Check log: $LOG_FILE${RESET}" >&3' ERR
 
 step "🚀 Step 1/9: Checking Docker..."
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker not installed" >&2
-  exit 1
-fi
+command -v docker >/dev/null 2>&1 || { echo "Docker not installed" >&2; exit 1; }
+docker info >/dev/null
 
 step "📦 Step 2/9: Checking/Installing kind..."
 if ! command -v kind >/dev/null 2>&1; then
-  curl -Lo kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+  curl -Lo kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
   chmod +x kind
   sudo mv kind /usr/local/bin/kind
 fi
@@ -49,7 +37,7 @@ fi
 
 step "📄 Step 4/9: Creating config file if needed..."
 if [ ! -f "$CONFIG_FILE" ]; then
-  cat <<EOF > "$CONFIG_FILE"
+  cat <<EOF2 > "$CONFIG_FILE"
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -57,37 +45,30 @@ nodes:
 - role: worker
 - role: worker
 - role: worker
-EOF
+EOF2
 fi
 
 step "⚙️ Step 5/9: Creating KIND cluster if not exists..."
-if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+if ! kind get clusters | grep -qx "$CLUSTER_NAME"; then
   kind create cluster --name "$CLUSTER_NAME" --config "$CONFIG_FILE"
 fi
 
 step "🔧 Step 6/9: Setting kubectl context..."
-kubectl config use-context "$CONTEXT_NAME" >/dev/null 2>&1 || true
+kubectl config use-context "$CONTEXT_NAME" >/dev/null
 
 step "📡 Step 7/9: Checking cluster status..."
 kubectl cluster-info --context "$CONTEXT_NAME"
 kubectl get nodes
 
 step "🏷️ Step 8/9: Labeling worker nodes as node1, node2, node3..."
-
-# Get worker nodes (skip control-plane)
-WORKERS=$(kubectl get nodes --no-headers | grep -v control-plane | awk '{print $1}')
-
+WORKERS=$(kubectl get nodes --no-headers | awk '$3 != "control-plane" {print $1}')
 i=1
 for n in $WORKERS; do
   kubectl label node "$n" node-name="node$i" --overwrite
   i=$((i+1))
 done
-
 kubectl get nodes --show-labels
 
 step "✅ Step 9/9: Done!"
-
-# Restore stdout/stderr
 exec 1>&3 2>&4
-
 echo "${GREEN}✅ SUCCESS: Completed. Detailed logs saved in: $LOG_FILE${RESET}"
