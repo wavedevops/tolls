@@ -1,32 +1,29 @@
-#!/usr/bin/env bash
-#
-# run-all.sh — Full KIND setup: install tools, create cluster, deploy test app
-#
-# Usage:
-#   ./run-all.sh              # single-node dev cluster (default)
-#   ./run-all.sh multi        # multi-node cluster instead
-#   ./run-all.sh both         # both single and multi-node clusters
-#
-set -euo pipefail
+#!/bin/bash
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODE="${1:-single}"
+# Make scripts executable
+chmod +x 01.kind.sh 02.compile.sh 03.commands.sh
 
-echo "=============================================="
-echo " Step 1/3: Installing Docker, kubectl, KIND"
-echo "=============================================="
-bash "${DIR}/01.kind.sh"
+set -e  # Stop if any command fails
 
-echo "=============================================="
-echo " Step 2/3: Creating cluster(s) [mode=${MODE}]"
-echo "=============================================="
-bash "${DIR}/02.compile.sh" "${MODE}"
+# Colors
+GREEN=$(tput setaf 2)
+RED=$(tput setaf 1)
+BLUE=$(tput setaf 4)
+YELLOW=$(tput setaf 3)
+RESET=$(tput sgr0)
 
-echo "=============================================="
-echo " Step 3/3: Reference commands"
-echo "=============================================="
-bash "${DIR}/03.commands.sh"
+# On any error
+trap 'echo "${RED}❌ ERROR: One script failed. Stopping execution.${RESET}"' ERR
 
-echo
-echo "All done. Your KIND cluster(s) should now be running."
-echo "Run 'kind get clusters' to confirm."
+echo "${BLUE}▶ Running 01.kind.sh...${RESET}"
+bash ./01.kind.sh
+
+echo "${BLUE}▶ Running 02.compile.sh...${RESET}"
+bash ./02.compile.sh
+
+echo "${BLUE}▶ Running 03.commands.sh...${RESET}"
+bash ./03.commands.sh
+
+echo "${GREEN}✅ All scripts executed successfully!${RESET}"
+
+echo "${GREEN}👉 Run this command:${RESET} ${YELLOW}source ~/.bashrc${RESET}"

@@ -1,63 +1,93 @@
-#!/usr/bin/env bash
-#
-# 01.kind.sh — Install Docker, kubectl, and KIND on Ubuntu
-#
-set -euo pipefail
+#!/bin/bash
 
-log() { echo -e "\n>>> $1\n"; }
+set -e
 
-KIND_VERSION="v0.32.0"
-ARCH="amd64"   # change to arm64 if running on an ARM Ubuntu host
+CLUSTER_NAME="k8s-cluster"
+CONFIG_FILE="main.yaml"
+CONTEXT_NAME="kind-${CLUSTER_NAME}"
 
-# ---------------------------------------------------------------------------
-# 1. Docker
-# ---------------------------------------------------------------------------
-log "Updating package index"
-sudo apt update
+# Colors
+GREEN=$(tput setaf 2)
+RED=$(tput setaf 1)
+BLUE=$(tput setaf 4)
+RESET=$(tput sgr0)
 
-log "Installing Docker"
-sudo apt install -y docker.io
+# mktemp needs at least 6 X
+LOG_FILE="$(mktemp /tmp/kind-setup-XXXXXX.log)"
 
-log "Enabling and starting Docker service"
-sudo systemctl enable docker
-sudo systemctl start docker
+# Send all command output to log file
+exec 3>&1 4>&2
+exec >"$LOG_FILE" 2>&1
 
-log "Docker version"
-docker --version
+# Print step messages in BLUE
+step() {
+  echo "${BLUE}$1${RESET}" >&3
+}
 
-# ---------------------------------------------------------------------------
-# 2. kubectl
-# ---------------------------------------------------------------------------
-log "Fetching latest stable kubectl version"
-KUBECTL_VERSION="$(curl -Ls https://dl.k8s.io/release/stable.txt)"
+# On any error, print FAILURE in RED
+trap 'echo "${RED}❌ FAILURE: Something went wrong. Check log: $LOG_FILE${RESET}" >&3' ERR
 
-log "Downloading kubectl ${KUBECTL_VERSION}"
-curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl"
-chmod +x kubectl
-sudo mv kubectl /usr/local/bin/
+step "🚀 Step 1/9: Checking Docker..."
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Docker not installed" >&2
+  exit 1
+fi
 
-log "kubectl client version"
-kubectl version --client
+step "📦 Step 2/9: Checking/Installing kind..."
+if ! command -v kind >/dev/null 2>&1; then
+  curl -Lo kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+  chmod +x kind
+  sudo mv kind /usr/local/bin/kind
+fi
 
-# ---------------------------------------------------------------------------
-# 3. KIND
-# ---------------------------------------------------------------------------
-log "Downloading KIND ${KIND_VERSION}"
-curl -Lo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-${ARCH}"
-chmod +x ./kind
-sudo mv ./kind /usr/local/bin/kind
+step "🧰 Step 3/9: Checking/Installing kubectl..."
+if ! command -v kubectl >/dev/null 2>&1; then
+  curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+  chmod +x kubectl
+  sudo mv kubectl /usr/local/bin/kubectl
+fi
 
-log "KIND version"
-kind version
+step "📄 Step 4/9: Creating config file if needed..."
+if [ ! -f "$CONFIG_FILE" ]; then
+  cat <<EOF > "$CONFIG_FILE"
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+- role: worker
+EOF
+fi
 
-# ---------------------------------------------------------------------------
-# 4. Non-root Docker access (optional but recommended)
-# ---------------------------------------------------------------------------
-log "Adding $USER to the docker group (log out/in or run 'newgrp docker' to apply)"
-sudo usermod -aG docker "$USER"
+step "⚙️ Step 5/9: Creating KIND cluster if not exists..."
+if ! kind get clusters | grep -q "^${CLUSTER_NAME}$"; then
+  kind create cluster --name "$CLUSTER_NAME" --config "$CONFIG_FILE"
+fi
 
-log "Setup complete. If 'docker ps' below fails with a permission error, run:"
-echo "    newgrp docker"
-echo "or log out and back in, then re-run: docker ps"
+step "🔧 Step 6/9: Setting kubectl context..."
+kubectl config use-context "$CONTEXT_NAME" >/dev/null 2>&1 || true
 
-docker ps || true
+step "📡 Step 7/9: Checking cluster status..."
+kubectl cluster-info --context "$CONTEXT_NAME"
+kubectl get nodes
+
+step "🏷️ Step 8/9: Labeling worker nodes as node1, node2, node3..."
+
+# Get worker nodes (skip control-plane)
+WORKERS=$(kubectl get nodes --no-headers | grep -v control-plane | awk '{print $1}')
+
+i=1
+for n in $WORKERS; do
+  kubectl label node "$n" node-name="node$i" --overwrite
+  i=$((i+1))
+done
+
+kubectl get nodes --show-labels
+
+step "✅ Step 9/9: Done!"
+
+# Restore stdout/stderr
+exec 1>&3 2>&4
+
+echo "${GREEN}✅ SUCCESS: Completed. Detailed logs saved in: $LOG_FILE${RESET}"
