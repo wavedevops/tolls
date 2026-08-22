@@ -1,79 +1,54 @@
 #!/bin/bash
 
-set -euo pipefail
+set -e
 
 CLUSTER_NAME="k8s-cluster"
+CONFIG_FILE="main.yaml"
 CONTEXT_NAME="kind-${CLUSTER_NAME}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/main.yaml"
-LOG_FILE="$(mktemp /tmp/kind-setup-XXXXXX.log)"
 
-GREEN=$(tput setaf 2 2>/dev/null || true)
-RED=$(tput setaf 1 2>/dev/null || true)
-BLUE=$(tput setaf 4 2>/dev/null || true)
-YELLOW=$(tput setaf 3 2>/dev/null || true)
-RESET=$(tput sgr0 2>/dev/null || true)
+LOG_FILE="$(mktemp /tmp/kind-setup-XXXXXX.log)"
 
 exec 3>&1 4>&2
 exec >"$LOG_FILE" 2>&1
 
 step() {
-    echo "${BLUE}$1${RESET}" >&3
+    echo "$1" >&3
 }
 
-fail() {
-    echo "${RED}❌ FAILURE: $1${RESET}" >&3
-    echo "${YELLOW}📄 Log: ${LOG_FILE}${RESET}" >&3
+trap 'echo "❌ Error occurred. Check log: $LOG_FILE" >&3; exit 1' ERR
+
+step "🚀 Step 1/9: Checking Docker..."
+
+if ! command -v docker >/dev/null 2>&1; then
+    echo "❌ Docker is not installed." >&2
+    echo "Please install Docker first." >&2
     exit 1
-}
+fi
 
-trap 'fail "Something went wrong."' ERR
+if ! sudo systemctl is-active --quiet docker; then
+    step "🔄 Starting Docker..."
+    sudo systemctl enable --now docker
+fi
 
-# --------------------------------------------------
-# 1. Dependencies
-# --------------------------------------------------
+step "✅ Docker is ready."
 
-step "🚀 Step 1/9: Checking dependencies..."
-
-command -v docker >/dev/null 2>&1 \
-    || fail "Docker is not installed."
-
-command -v curl >/dev/null 2>&1 \
-    || fail "curl is not installed."
-
-command -v sudo >/dev/null 2>&1 \
-    || fail "sudo is not installed."
-
-docker info >/dev/null 2>&1 \
-    || fail "Docker is not running or current user cannot access Docker."
-
-# --------------------------------------------------
-# 2. kind
-# --------------------------------------------------
-
-step "📦 Step 2/9: Checking kind..."
+step "📦 Step 2/9: Checking/Installing Kind..."
 
 if ! command -v kind >/dev/null 2>&1; then
-    echo "Installing kind..."
+    KIND_VERSION="v0.29.0"
 
     curl -Lo /tmp/kind \
-        https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+        "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
 
     chmod +x /tmp/kind
     sudo mv /tmp/kind /usr/local/bin/kind
 fi
 
-kind version
+step "✅ Kind version: $(kind version)"
 
-# --------------------------------------------------
-# 3. kubectl
-# --------------------------------------------------
-
-step "🧰 Step 3/9: Checking kubectl..."
+step "🧰 Step 3/9: Checking/Installing kubectl..."
 
 if ! command -v kubectl >/dev/null 2>&1; then
-    echo "Installing kubectl..."
-
     KUBECTL_VERSION="$(curl -L -s https://dl.k8s.io/release/stable.txt)"
 
     curl -LO \
@@ -81,20 +56,16 @@ if ! command -v kubectl >/dev/null 2>&1; then
 
     chmod +x kubectl
     sudo mv kubectl /usr/local/bin/kubectl
-
     rm -f kubectl
 fi
 
+step "✅ kubectl version:"
 kubectl version --client
 
-# --------------------------------------------------
-# 4. Kind configuration
-# --------------------------------------------------
+step "📄 Step 4/9: Creating Kind configuration..."
 
-step "📄 Step 4/9: Creating KIND configuration..."
-
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    cat > "$CONFIG_FILE" <<'EOF'
+if [ ! -f "$CONFIG_FILE" ]; then
+cat > "$CONFIG_FILE" <<EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 
@@ -104,83 +75,65 @@ nodes:
   - role: worker
   - role: worker
 EOF
-
-    echo "Created: $CONFIG_FILE"
+    step "✅ Created $CONFIG_FILE"
 else
-    echo "Using existing: $CONFIG_FILE"
+    step "ℹ️ $CONFIG_FILE already exists."
 fi
 
-# --------------------------------------------------
-# 5. Create cluster
-# --------------------------------------------------
+step "⚙️ Step 5/9: Creating Kind cluster..."
 
-step "⚙️ Step 5/9: Creating KIND cluster..."
-
-if kind get clusters | grep -Fxq "$CLUSTER_NAME"; then
-    echo "Cluster '${CLUSTER_NAME}' already exists."
-else
+if ! kind get clusters | grep -qx "$CLUSTER_NAME"; then
     kind create cluster \
         --name "$CLUSTER_NAME" \
         --config "$CONFIG_FILE"
+else
+    step "ℹ️ Cluster '$CLUSTER_NAME' already exists."
 fi
-
-# --------------------------------------------------
-# 6. Context
-# --------------------------------------------------
 
 step "🔧 Step 6/9: Setting kubectl context..."
 
-kubectl config use-context "$CONTEXT_NAME"
-
-# --------------------------------------------------
-# 7. Cluster status
-# --------------------------------------------------
+kubectl config use-context "$CONTEXT_NAME" >/dev/null
+step "✅ Current context: $CONTEXT_NAME"
 
 step "📡 Step 7/9: Checking cluster status..."
 
 kubectl cluster-info --context "$CONTEXT_NAME"
 
-echo
-kubectl get nodes -o wide
-
-# --------------------------------------------------
-# 8. Label workers
-# --------------------------------------------------
+echo >&3
+kubectl get nodes >&3
 
 step "🏷️ Step 8/9: Labeling worker nodes..."
 
-mapfile -t WORKERS < <(
-    kubectl get nodes \
-        -l 'node-role.kubernetes.io/control-plane!=' \
-        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
-)
-
-if [[ "${#WORKERS[@]}" -eq 0 ]]; then
-    fail "No worker nodes found."
-fi
+WORKERS=$(kubectl get nodes \
+    --no-headers \
+    -o custom-columns=":metadata.name" \
+    | grep -v "control-plane" || true)
 
 i=1
 
-for node in "${WORKERS[@]}"; do
-    kubectl label node \
-        "$node" \
-        "node-name=node${i}" \
+for node in $WORKERS; do
+    kubectl label node "$node" \
+        "node-name=node$i" \
         --overwrite
-
-    ((i++))
+    step "✅ $node → node-name=node$i"
+    i=$((i + 1))
 done
 
-echo
-kubectl get nodes --show-labels
+echo >&3
+kubectl get nodes --show-labels >&3
 
-# --------------------------------------------------
-# 9. Done
-# --------------------------------------------------
-
-step "✅ Step 9/9: Done!"
+step "✅ Step 9/9: Kind cluster setup completed!"
 
 exec 1>&3 2>&4
 
 echo
-echo "${GREEN}✅ SUCCESS: KIND cluster '${CLUSTER_NAME}' is ready.${RESET}"
-echo "${GREEN}📄 Detailed log: ${LOG_FILE}${RESET}"
+echo "=============================================="
+echo "✅ KIND CLUSTER READY"
+echo "=============================================="
+echo "Cluster : $CLUSTER_NAME"
+echo "Context : $CONTEXT_NAME"
+echo "Workers : 3"
+echo
+echo "Log file:"
+echo "$LOG_FILE"
+echo "=============================================="
